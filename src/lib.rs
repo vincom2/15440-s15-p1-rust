@@ -25,7 +25,7 @@ pub extern fn open_nocreate(pathname: *const c_char, flags: c_int) -> c_int {
         let open_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("open").unwrap().as_ptr());
         let orig_open:unsafe fn(*const c_char, c_int) -> c_int = mem::transmute(open_);
         let slice = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
-        //println!("Rust: open with {} and {}", slice, flags);
+        println!("Rust: open with {} and {}", slice, flags);
         orig_open(pathname, flags)
     }
 }
@@ -36,7 +36,7 @@ pub extern fn open_create(pathname: *const c_char, flags: c_int, mode: mode_t) -
         let open_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("open").unwrap().as_ptr());
         let orig_open:unsafe fn(*const c_char, c_int, mode_t) -> c_int = mem::transmute(open_);
         let slice = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
-        //println!("Rust: open with {} and {} and {}", slice, flags, mode);
+        println!("Rust: open with {} and {} and {}", slice, flags, mode);
         orig_open(pathname, flags, mode)
     }
 }
@@ -46,7 +46,7 @@ pub extern fn close(fd: c_int) -> c_int {
     unsafe {
         let close_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("close").unwrap().as_ptr());
         let orig_close:unsafe fn(c_int) -> c_int = mem::transmute(close_);
-        //println!("Rust: close with {}", fd);
+        println!("Rust: close with {}", fd);
         orig_close(fd)
     }
 }
@@ -56,13 +56,12 @@ pub extern fn read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
     unsafe {
         let read_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("read").unwrap().as_ptr());
         let orig_read:unsafe fn(c_int, *mut c_void, size_t) -> ssize_t = mem::transmute(read_);
-        //println!("Rust: read with {} and {}", fd, count);
+        println!("Rust: read with {} and {}", fd, count);
         orig_read(fd, buf, count)
     }
 }
 
-// leaving this uncommented causes a segfault :O:O
-// dammit, something in the rust stdlib calls write??? :(
+// can't call println!() from within this :(
 #[no_mangle]
 pub extern fn write(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
     unsafe {
@@ -78,7 +77,7 @@ pub extern fn lseek(fd: c_int, offset: off_t, whence: c_int) -> off_t {
     unsafe {
         let lseek_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("lseek").unwrap().as_ptr());
         let orig_lseek:unsafe fn(c_int, off_t, c_int) -> off_t = mem::transmute(lseek_);
-        //println!("Rust: lseek with {} and {} and {}", fd, offset, whence);
+        println!("Rust: lseek with {} and {} and {}", fd, offset, whence);
         orig_lseek(fd, offset, whence)
     }
 }
@@ -89,7 +88,7 @@ pub extern fn unlink(pathname: *const c_char) -> c_int {
         let unlink_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("unlink").unwrap().as_ptr());
         let orig_unlink:unsafe fn(*const c_char) -> c_int = mem::transmute(unlink_);
         let slice = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
-        //println!("Rust: unlink with {}", slice);
+        println!("Rust: unlink with {}", slice);
         orig_unlink(pathname)
     }
 }
