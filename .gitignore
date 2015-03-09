@@ -4,3 +4,4 @@ Cargo.lock
 *.a
 *.so
 *.o
+a.out

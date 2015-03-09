@@ -1,0 +1,12 @@
+[package]
+name = "fileops"
+version = "0.0.1"
+authors = ["Vincent Huang <vincom2@gmail.com>"]
+build = "build.rs"
+
+[lib]
+name = "fileops"
+crate-type = ["dylib"]
+
+[build-dependencies]
+gcc = "0.2"
