@@ -1,6 +1,11 @@
 #![feature(libc)]
+
 #![allow(unused_variables)]
+#![allow(non_upper_case_globals)]
+
 extern crate libc;
+#[macro_use(lazy_static)]
+extern crate lazy_static;
 
 use libc::{c_int, c_long, size_t, c_char, c_void,
            ssize_t, off_t, mode_t, dev_t, ino_t, nlink_t,
@@ -12,7 +17,64 @@ use std::mem;
 use std::ptr;
 use std::default::Default;
 
+extern "C" {
+    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+}
+
 static RTLD_NEXT: c_long = -1;
+// call dlsym() to initialise C function pointers to all the glibc versions
+// UNSAFE
+lazy_static! {
+    static ref orig_open_nocreate:unsafe fn(*const c_char, c_int) -> c_int = {
+        let open_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("open").unwrap().as_ptr());
+        mem::transmute(open_)
+    };
+
+    static ref orig_open_create:unsafe fn(*const c_char, c_int, mode_t) -> c_int = {
+        let open_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("open").unwrap().as_ptr());
+        mem::transmute(open_)
+    };
+
+    static ref orig_close:unsafe fn(c_int) -> c_int = {
+        let close_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("close").unwrap().as_ptr());
+        mem::transmute(close_)
+    };
+
+    static ref orig_read:unsafe fn(c_int, *mut c_void, size_t) -> ssize_t = {
+        let read_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("read").unwrap().as_ptr());
+        mem::transmute(read_)
+    };
+
+    static ref orig_write:unsafe fn(c_int, *mut c_void, size_t) -> ssize_t = {
+        let write_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("write").unwrap().as_ptr());
+        mem::transmute(write_)
+    };
+
+    static ref orig_lseek:unsafe fn(c_int, off_t, c_int) -> off_t = {
+        let lseek_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("lseek").unwrap().as_ptr());
+        mem::transmute(lseek_)
+    };
+
+    static ref orig_unlink:unsafe fn(*const c_char) -> c_int = {
+        let unlink_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("unlink").unwrap().as_ptr());
+        mem::transmute(unlink_)
+    };
+
+    static ref orig_stat:unsafe fn(c_int, *const c_char, *mut struct_stat_t) -> c_int = {
+        let stat_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("__xstat").unwrap().as_ptr());
+        mem::transmute(stat_)
+    };
+
+    static ref orig_gde:unsafe fn(c_int, *mut c_char, size_t, *mut off_t) -> ssize_t = {
+        let gde_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("getdirentries").unwrap().as_ptr());
+        mem::transmute(gde_)
+    };
+
+    static ref orig_gdt:unsafe fn(*const c_char) -> *mut struct_dirtreenode_t = {
+        let gdt_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("getdirtree").unwrap().as_ptr());
+        mem::transmute(gdt_)
+    };
+}
 
 #[repr(C)]
 pub struct struct_stat_t {
@@ -68,10 +130,6 @@ impl Default for struct_dirtreenode_t {
     }
 }
 
-extern "C" {
-    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
-}
-
 // I'm not sure where the unsafe belongs, lol.
 // Technically it's possible to do safe things within the bodies of these functions
 // (like when you do RPC and stuff, I guess?)
@@ -81,30 +139,24 @@ extern "C" {
 #[no_mangle]
 pub extern fn open_nocreate(pathname: *const c_char, flags: c_int) -> c_int {
     unsafe {
-        let open_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("open").unwrap().as_ptr());
-        let orig_open:unsafe fn(*const c_char, c_int) -> c_int = mem::transmute(open_);
         let slice = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
         //println!("Rust: open with {} and {}", slice, flags);
-        orig_open(pathname, flags)
+        orig_open_nocreate(pathname, flags)
     }
 }
 
 #[no_mangle]
 pub extern fn open_create(pathname: *const c_char, flags: c_int, mode: mode_t) -> c_int {
     unsafe {
-        let open_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("open").unwrap().as_ptr());
-        let orig_open:unsafe fn(*const c_char, c_int, mode_t) -> c_int = mem::transmute(open_);
         let slice = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
         //println!("Rust: open with {} and {} and {}", slice, flags, mode);
-        orig_open(pathname, flags, mode)
+        orig_open_create(pathname, flags, mode)
     }
 }
 
 #[no_mangle]
 pub extern fn close(fd: c_int) -> c_int {
     unsafe {
-        let close_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("close").unwrap().as_ptr());
-        let orig_close:unsafe fn(c_int) -> c_int = mem::transmute(close_);
         //println!("Rust: close with {}", fd);
         orig_close(fd)
     }
@@ -113,8 +165,6 @@ pub extern fn close(fd: c_int) -> c_int {
 #[no_mangle]
 pub extern fn read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
     unsafe {
-        let read_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("read").unwrap().as_ptr());
-        let orig_read:unsafe fn(c_int, *mut c_void, size_t) -> ssize_t = mem::transmute(read_);
         //println!("Rust: read with {} and {}", fd, count);
         orig_read(fd, buf, count)
     }
@@ -124,8 +174,6 @@ pub extern fn read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
 #[no_mangle]
 pub extern fn write(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
     unsafe {
-        let write_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("write").unwrap().as_ptr());
-        let orig_write:unsafe fn(c_int, *mut c_void, size_t) -> ssize_t = mem::transmute(write_);
         //println!("Rust: write with {} and {}", fd, count);
         orig_write(fd, buf, count)
     }
@@ -134,8 +182,6 @@ pub extern fn write(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
 #[no_mangle]
 pub extern fn lseek(fd: c_int, offset: off_t, whence: c_int) -> off_t {
     unsafe {
-        let lseek_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("lseek").unwrap().as_ptr());
-        let orig_lseek:unsafe fn(c_int, off_t, c_int) -> off_t = mem::transmute(lseek_);
         //println!("Rust: lseek with {} and {} and {}", fd, offset, whence);
         orig_lseek(fd, offset, whence)
     }
@@ -144,8 +190,6 @@ pub extern fn lseek(fd: c_int, offset: off_t, whence: c_int) -> off_t {
 #[no_mangle]
 pub extern fn unlink(pathname: *const c_char) -> c_int {
     unsafe {
-        let unlink_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("unlink").unwrap().as_ptr());
-        let orig_unlink:unsafe fn(*const c_char) -> c_int = mem::transmute(unlink_);
         let slice = str::from_utf8(CStr::from_ptr(pathname).to_bytes()).unwrap();
         //println!("Rust: unlink with {}", slice);
         orig_unlink(pathname)
@@ -155,8 +199,6 @@ pub extern fn unlink(pathname: *const c_char) -> c_int {
 #[no_mangle]
 pub extern fn __xstat(ver: c_int, path: *const c_char, buf: *mut struct_stat_t) -> c_int {
     unsafe {
-        let stat_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("__xstat").unwrap().as_ptr());
-        let orig_stat:unsafe fn(c_int, *const c_char, *mut struct_stat_t) -> c_int = mem::transmute(stat_);
         let slice = str::from_utf8(CStr::from_ptr(path).to_bytes()).unwrap();
         //println!("Rust: __xstat with {}", slice);
         orig_stat(ver, path, buf)
@@ -166,8 +208,6 @@ pub extern fn __xstat(ver: c_int, path: *const c_char, buf: *mut struct_stat_t) 
 #[no_mangle]
 pub extern fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: *mut off_t) -> ssize_t {
     unsafe {
-        let gde_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("getdirentries").unwrap().as_ptr());
-        let orig_gde:unsafe fn(c_int, *mut c_char, size_t, *mut off_t) -> ssize_t = mem::transmute(gde_);
         //println!("Rust: getdirentries with {} and {}", fd, *basep);
         orig_gde(fd, buf, nbytes, basep)
     }
@@ -179,8 +219,6 @@ pub extern fn getdirentries(fd: c_int, buf: *mut c_char, nbytes: size_t, basep: 
 #[no_mangle]
 pub extern fn getdirtree(path: *const c_char) -> *mut struct_dirtreenode_t {
     unsafe {
-        let gdt_ = dlsym(RTLD_NEXT as *mut c_void, CString::new("getdirtree").unwrap().as_ptr());
-        let orig_gdt:unsafe fn(*const c_char) -> *mut struct_dirtreenode_t = mem::transmute(gdt_);
         let slice = str::from_utf8(CStr::from_ptr(path).to_bytes()).unwrap();
         //println!("Rust: getdirtree with {}", slice);
         orig_gdt(path)
